@@ -1,0 +1,40 @@
+services:
+  db:
+    build: ./db
+    environment:
+      POSTGRES_DB: ilha-de-calor
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      # Scripts de criacao (rodam 1x quando o volume esta vazio)
+      - ./db/initdb:/docker-entrypoint-initdb.d:ro
+      # Dados de origem (raster + vetor) disponibilizados ao init em /data
+      - ./data:/data:ro
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      # 5433 no host para nao conflitar com um PostgreSQL local na 5432
+      - "5433:5432"
+    healthcheck:
+      # So fica "healthy" depois que a carga populou a tabela municipios
+      test: ["CMD-SHELL", "psql -U postgres -d ilha-de-calor -c 'SELECT 1 FROM municipios LIMIT 1' >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+
+  shiny:
+    build: ./app
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGDATABASE: ilha-de-calor
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    ports:
+      - "3838:3838"
+
+volumes:
+  pgdata:
